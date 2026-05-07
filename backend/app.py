@@ -31,7 +31,7 @@ vectordb = Chroma(
 )
 
 # Ollama model
-llm = Ollama(model="llama3")
+llm = Ollama(model="mistral")
 
 class ChatRequest(BaseModel):
     question: str
@@ -39,29 +39,32 @@ class ChatRequest(BaseModel):
 @app.post("/api/chat")
 def chat(req: ChatRequest):
 
-    # Retrieve top chunks
-    docs = vectordb.similarity_search(
-        req.question,
-        k=4
-    )
+    try:
 
-    # Combine context
-    context = "\n\n".join([
-        doc.page_content for doc in docs
-    ])
+        # Retrieve relevant chunks
+        docs = vectordb.similarity_search(
+            req.question,
+            k=2
+        )
 
-    # Sources
-    sources = list(set([
-        doc.metadata["source"] for doc in docs
-    ]))
+        # Create context
+        context = "\n\n".join([
+            doc.page_content for doc in docs
+        ])
 
-    # Prompt
-    prompt = f"""
+        # Source documents
+        sources = list(set([
+            doc.metadata.get("source", "Unknown")
+            for doc in docs
+        ]))
+
+        # Prompt
+        prompt = f"""
 You are an internal company policy assistant.
 
 Answer ONLY using the provided context.
 
-If answer is not found, say:
+If the answer is not found, say:
 "I don't have that information in the company documents."
 
 Context:
@@ -71,10 +74,16 @@ Question:
 {req.question}
 """
 
-    # Generate response
-    answer = llm.invoke(prompt)
+        # Generate answer
+        answer = llm.invoke(prompt)
 
-    return {
-        "answer": answer,
-        "sources": sources
-    }
+        return {
+            "answer": answer,
+            "sources": sources
+        }
+
+    except Exception as e:
+
+        return {
+            "error": str(e)
+        }
